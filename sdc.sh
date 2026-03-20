@@ -13,6 +13,7 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [sdc.sh] session-start" >> "$RUN_LOG"
 
 MAX_RETRIES=20
 retry=0
+launched_once=false
 
 while true; do
   # Check for remaining open issues
@@ -20,15 +21,14 @@ while true; do
 
   if [ "$open" = "-1" ]; then
     echo "Warning: Could not check GitHub issues. Launching lead session anyway..."
+  elif [ "$open" -eq 0 ] && [ "$launched_once" = true ]; then
+    # Only exit after we've launched the lead at least once
+    # This ensures new spec requirements get picked up even when all old issues are closed
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [sdc.sh] all-tasks-complete" >> .sdc/logs/run-latest.log
+    echo "All tasks complete."
+    break
   elif [ "$open" -eq 0 ]; then
-    # Check if we ever created any issues (not just a fresh start with no specs)
-    total=$(gh issue list --label "sdc" --state all --json number 2>/dev/null | jq 'length' 2>/dev/null || echo "0")
-    if [ "$total" -gt 0 ]; then
-      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [sdc.sh] all-tasks-complete" >> .sdc/logs/run-latest.log
-      echo "All tasks complete."
-      break
-    fi
-    echo "No existing run found. Starting fresh..."
+    echo "Launching lead to check for new work..."
   else
     echo "$open task(s) remaining."
   fi
@@ -47,6 +47,7 @@ while true; do
   # Exit code 0 = clean exit, non-zero = crash/interrupt
   exit_code=0
   claude -p "/self-drive" || exit_code=$?
+  launched_once=true
   if [ "$exit_code" -ne 0 ]; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [sdc.sh] lead-crashed exit=$exit_code" >> .sdc/logs/run-latest.log
     echo "Lead session exited with code $exit_code. Restarting in 5 seconds..."

@@ -99,6 +99,13 @@ router.get('/:id', (req, res) => {
   }
 
   task.tags = getTagsForTask(task.id);
+
+  let project = null;
+  if (task.project_id) {
+    project = db.prepare('SELECT id, name, description, created_at FROM projects WHERE id = ?').get(task.project_id);
+  }
+  task.project = project;
+
   res.json(task);
 });
 
@@ -110,7 +117,7 @@ router.patch('/:id', (req, res) => {
     return res.status(404).json({ error: 'Task not found' });
   }
 
-  const { title, description, status, priority, due_date } = req.body;
+  const { title, description, status, priority, due_date, project_id } = req.body;
 
   const validStatuses = ['todo', 'in-progress', 'done'];
   if (status !== undefined && !validStatuses.includes(status)) {
@@ -129,10 +136,11 @@ router.patch('/:id', (req, res) => {
   const updatedStatus = status !== undefined ? status : task.status;
   const updatedPriority = priority !== undefined ? priority : task.priority;
   const updatedDueDate = due_date !== undefined ? due_date : task.due_date;
+  const updatedProjectId = project_id !== undefined ? project_id : task.project_id;
 
   db.prepare(
-    'UPDATE tasks SET title = ?, description = ?, status = ?, priority = ?, due_date = ?, updated_at = ? WHERE id = ?'
-  ).run(updatedTitle, updatedDescription, updatedStatus, updatedPriority, updatedDueDate, now, req.params.id);
+    'UPDATE tasks SET title = ?, description = ?, status = ?, priority = ?, due_date = ?, project_id = ?, updated_at = ? WHERE id = ?'
+  ).run(updatedTitle, updatedDescription, updatedStatus, updatedPriority, updatedDueDate, updatedProjectId, now, req.params.id);
 
   const updatedTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   res.json(updatedTask);
