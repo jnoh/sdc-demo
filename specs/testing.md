@@ -1,15 +1,18 @@
 # Testing
 
 ## Requirements
-- [ ] Tests using Node.js built-in test runner (node:test)
-- [ ] Test all CRUD endpoints (happy path + error cases)
-- [ ] Tests use a separate test database (not the production one)
-- [ ] npm test runs all tests and exits with correct code
+- [x] Tests using Node.js built-in test runner (node:test)
+- [x] Test all CRUD endpoints (happy path + error cases)
+- [x] Tests use a separate test database (not the production one)
+- [x] npm test runs all tests and exits with correct code
+- [ ] Tests cover sorting functionality
+- [ ] Tests cover status validation on PATCH
 
 ## Acceptance Criteria
 - `npm test` passes with 0 exit code
-- At least one test per endpoint (6+ tests minimum)
 - Tests cover: create, list, list with filter, get by id, update, delete, 404, validation error
+- Tests cover sorting by created_at asc/desc
+- Tests cover invalid status rejection on PATCH
 - Test database is cleaned up between test files
 
 ## Decisions

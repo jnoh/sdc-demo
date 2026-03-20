@@ -1,10 +1,10 @@
 # Database
 
 ## Requirements
-- [ ] SQLite database using better-sqlite3
-- [ ] Tasks table: id, title, description, status (todo/in-progress/done), created_at, updated_at
-- [ ] Database module that exports a configured db instance
-- [ ] Schema auto-creates on first run (no migration tool needed)
+- [x] SQLite database using better-sqlite3
+- [x] Tasks table: id, title, description, status (todo/in-progress/done), created_at, updated_at
+- [x] Database module that exports a configured db instance
+- [x] Schema auto-creates on first run (no migration tool needed)
 
 ## Acceptance Criteria
 - `require('./db')` returns a ready-to-use better-sqlite3 instance
