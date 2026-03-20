@@ -457,4 +457,170 @@ describe('Tasks API', () => {
       assert.equal(res.body.tags.length, 0);
     });
   });
+
+  // ---- Priority field ----
+
+  describe('Priority field', () => {
+    it('creates a task with priority and returns 201', async () => {
+      const res = await request('POST', '/tasks', { title: 'High priority', priority: 'high' });
+      assert.equal(res.status, 201);
+      assert.equal(res.body.priority, 'high');
+    });
+
+    it('defaults priority to medium when not specified', async () => {
+      const res = await request('POST', '/tasks', { title: 'Default priority' });
+      assert.equal(res.status, 201);
+      assert.equal(res.body.priority, 'medium');
+    });
+
+    it('returns 400 for invalid priority on create', async () => {
+      const res = await request('POST', '/tasks', { title: 'Bad priority', priority: 'critical' });
+      assert.equal(res.status, 400);
+      assert.equal(res.body.error, 'invalid priority');
+    });
+
+    it('updates priority via PATCH', async () => {
+      const created = await request('POST', '/tasks', { title: 'Change priority' });
+      const res = await request('PATCH', `/tasks/${created.body.id}`, { priority: 'low' });
+      assert.equal(res.status, 200);
+      assert.equal(res.body.priority, 'low');
+    });
+
+    it('returns 400 for invalid priority on update', async () => {
+      const created = await request('POST', '/tasks', { title: 'Validate priority' });
+      const res = await request('PATCH', `/tasks/${created.body.id}`, { priority: 'invalid' });
+      assert.equal(res.status, 400);
+      assert.equal(res.body.error, 'invalid priority');
+    });
+
+    it('filters tasks by priority', async () => {
+      await request('POST', '/tasks', { title: 'High 1', priority: 'high' });
+      await request('POST', '/tasks', { title: 'Low 1', priority: 'low' });
+      await request('POST', '/tasks', { title: 'High 2', priority: 'high' });
+
+      const res = await request('GET', '/tasks?priority=high');
+      assert.equal(res.status, 200);
+      assert.equal(res.body.length, 2);
+      assert.ok(res.body.every(t => t.priority === 'high'));
+    });
+
+    it('returns empty array when no tasks match priority filter', async () => {
+      await request('POST', '/tasks', { title: 'Medium task' });
+      const res = await request('GET', '/tasks?priority=high');
+      assert.equal(res.status, 200);
+      assert.deepEqual(res.body, []);
+    });
+  });
+
+  // ---- Due date field ----
+
+  describe('Due date field', () => {
+    it('creates a task with due_date and returns 201', async () => {
+      const res = await request('POST', '/tasks', { title: 'Due task', due_date: '2026-04-01T00:00:00Z' });
+      assert.equal(res.status, 201);
+      assert.equal(res.body.due_date, '2026-04-01T00:00:00Z');
+    });
+
+    it('defaults due_date to null when not specified', async () => {
+      const res = await request('POST', '/tasks', { title: 'No due date' });
+      assert.equal(res.status, 201);
+      assert.equal(res.body.due_date, null);
+    });
+
+    it('updates due_date via PATCH', async () => {
+      const created = await request('POST', '/tasks', { title: 'Update due date' });
+      const res = await request('PATCH', `/tasks/${created.body.id}`, { due_date: '2026-05-01T00:00:00Z' });
+      assert.equal(res.status, 200);
+      assert.equal(res.body.due_date, '2026-05-01T00:00:00Z');
+    });
+
+    it('filters overdue tasks', async () => {
+      const db = require('./db');
+      const pastDate = '2020-01-01T00:00:00Z';
+      const futureDate = '2099-12-31T00:00:00Z';
+      const now = new Date().toISOString();
+
+      // Overdue task (past due_date, not done)
+      db.prepare(
+        'INSERT INTO tasks (title, status, priority, due_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run('Overdue task', 'todo', 'medium', pastDate, now, now);
+
+      // Not overdue (future due_date)
+      db.prepare(
+        'INSERT INTO tasks (title, status, priority, due_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run('Future task', 'todo', 'medium', futureDate, now, now);
+
+      // Not overdue (past due_date but done)
+      db.prepare(
+        'INSERT INTO tasks (title, status, priority, due_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run('Done task', 'done', 'medium', pastDate, now, now);
+
+      // No due date
+      db.prepare(
+        'INSERT INTO tasks (title, status, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+      ).run('No date task', 'todo', 'medium', now, now);
+
+      const res = await request('GET', '/tasks?overdue=true');
+      assert.equal(res.status, 200);
+      assert.equal(res.body.length, 1);
+      assert.equal(res.body[0].title, 'Overdue task');
+    });
+
+    it('overdue filter returns empty when no tasks are overdue', async () => {
+      await request('POST', '/tasks', { title: 'Future task', due_date: '2099-12-31T00:00:00Z' });
+      const res = await request('GET', '/tasks?overdue=true');
+      assert.equal(res.status, 200);
+      assert.deepEqual(res.body, []);
+    });
+  });
+
+  // ---- GET /tasks/:id enriched response (tags AND project) ----
+
+  describe('GET /tasks/:id enriched response', () => {
+    it('includes both tags and project in response', async () => {
+      // Create a project
+      const project = await request('POST', '/projects', { name: 'Sprint 1', description: 'First sprint' });
+
+      // Create a task and assign to project
+      const task = await request('POST', '/tasks', { title: 'Enriched task', priority: 'high', due_date: '2026-04-01T00:00:00Z' });
+      await request('PATCH', `/tasks/${task.body.id}`, { project_id: project.body.id });
+
+      // Add tags
+      await request('POST', `/tasks/${task.body.id}/tags`, { name: 'urgent' });
+      await request('POST', `/tasks/${task.body.id}/tags`, { name: 'backend' });
+
+      // Fetch enriched response
+      const res = await request('GET', `/tasks/${task.body.id}`);
+      assert.equal(res.status, 200);
+
+      // Verify tags
+      assert.ok(Array.isArray(res.body.tags), 'tags should be an array');
+      assert.equal(res.body.tags.length, 2);
+      const tagNames = res.body.tags.map(t => t.name).sort();
+      assert.deepEqual(tagNames, ['backend', 'urgent']);
+      assert.ok(res.body.tags[0].id, 'each tag should have an id');
+
+      // Verify project
+      assert.ok(res.body.project, 'should have project object');
+      assert.equal(res.body.project.id, project.body.id);
+      assert.equal(res.body.project.name, 'Sprint 1');
+      assert.equal(res.body.project.description, 'First sprint');
+
+      // Verify other v2 fields
+      assert.equal(res.body.priority, 'high');
+      assert.equal(res.body.due_date, '2026-04-01T00:00:00Z');
+    });
+
+    it('includes tags and null project when task has no project', async () => {
+      const task = await request('POST', '/tasks', { title: 'Tags only task' });
+      await request('POST', `/tasks/${task.body.id}/tags`, { name: 'solo' });
+
+      const res = await request('GET', `/tasks/${task.body.id}`);
+      assert.equal(res.status, 200);
+      assert.ok(Array.isArray(res.body.tags));
+      assert.equal(res.body.tags.length, 1);
+      assert.equal(res.body.tags[0].name, 'solo');
+      assert.equal(res.body.project, null);
+    });
+  });
 });
