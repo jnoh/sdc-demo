@@ -51,7 +51,12 @@ router.get('/:id', (req, res) => {
     return res.status(404).json({ error: 'Task not found' });
   }
 
-  res.json(task);
+  let project = null;
+  if (task.project_id) {
+    project = db.prepare('SELECT id, name, description, created_at FROM projects WHERE id = ?').get(task.project_id);
+  }
+
+  res.json({ ...task, project });
 });
 
 // PATCH /tasks/:id — update title, description, or status
@@ -62,7 +67,7 @@ router.patch('/:id', (req, res) => {
     return res.status(404).json({ error: 'Task not found' });
   }
 
-  const { title, description, status } = req.body;
+  const { title, description, status, project_id } = req.body;
 
   const validStatuses = ['todo', 'in-progress', 'done'];
   if (status !== undefined && !validStatuses.includes(status)) {
@@ -74,10 +79,11 @@ router.patch('/:id', (req, res) => {
   const updatedTitle = title !== undefined ? title : task.title;
   const updatedDescription = description !== undefined ? description : task.description;
   const updatedStatus = status !== undefined ? status : task.status;
+  const updatedProjectId = project_id !== undefined ? project_id : task.project_id;
 
   db.prepare(
-    'UPDATE tasks SET title = ?, description = ?, status = ?, updated_at = ? WHERE id = ?'
-  ).run(updatedTitle, updatedDescription, updatedStatus, now, req.params.id);
+    'UPDATE tasks SET title = ?, description = ?, status = ?, project_id = ?, updated_at = ? WHERE id = ?'
+  ).run(updatedTitle, updatedDescription, updatedStatus, updatedProjectId, now, req.params.id);
 
   const updatedTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   res.json(updatedTask);
