@@ -3,22 +3,52 @@ const db = require('../db');
 
 const router = express.Router();
 
-// GET /tasks — list all tasks, optional ?status= filter, optional ?sort= ordering
-router.get('/', (req, res) => {
-  const { status, sort } = req.query;
+/**
+ * Helper: get tags for a task as an array of {id, name}.
+ */
+function getTagsForTask(taskId) {
+  return db.prepare(`
+    SELECT tags.id, tags.name
+    FROM tags
+    JOIN task_tags ON tags.id = task_tags.tag_id
+    WHERE task_tags.task_id = ?
+  `).all(taskId);
+}
 
-  let sql = 'SELECT * FROM tasks';
+// GET /tasks — list all tasks, optional ?status= filter, optional ?sort= ordering, optional ?tag= filter
+router.get('/', (req, res) => {
+  const { status, sort, tag } = req.query;
+
+  let sql = 'SELECT tasks.*';
   const params = [];
+  const joins = [];
+  const conditions = [];
+
+  if (tag) {
+    joins.push('JOIN task_tags ON tasks.id = task_tags.task_id');
+    joins.push('JOIN tags ON task_tags.tag_id = tags.id');
+    conditions.push('tags.name = ?');
+    params.push(tag);
+  }
+
+  sql += ' FROM tasks';
+  if (joins.length) {
+    sql += ' ' + joins.join(' ');
+  }
 
   if (status) {
-    sql += ' WHERE status = ?';
+    conditions.push('tasks.status = ?');
     params.push(status);
+  }
+
+  if (conditions.length) {
+    sql += ' WHERE ' + conditions.join(' AND ');
   }
 
   if (sort) {
     const [column, direction] = sort.split(':');
     if (column === 'created_at' && (direction === 'asc' || direction === 'desc')) {
-      sql += ` ORDER BY created_at ${direction.toUpperCase()}`;
+      sql += ` ORDER BY tasks.created_at ${direction.toUpperCase()}`;
     }
   }
 
@@ -43,7 +73,7 @@ router.post('/', (req, res) => {
   res.status(201).json(task);
 });
 
-// GET /tasks/:id — get a single task
+// GET /tasks/:id — get a single task (includes tags array)
 router.get('/:id', (req, res) => {
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
 
@@ -51,6 +81,7 @@ router.get('/:id', (req, res) => {
     return res.status(404).json({ error: 'Task not found' });
   }
 
+  task.tags = getTagsForTask(task.id);
   res.json(task);
 });
 
@@ -92,6 +123,49 @@ router.delete('/:id', (req, res) => {
   }
 
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
+  res.status(204).send();
+});
+
+// POST /tasks/:id/tags — add a tag to a task
+router.post('/:id/tags', (req, res) => {
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+
+  if (!task) {
+    return res.status(404).json({ error: 'Task not found' });
+  }
+
+  const { name } = req.body;
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ error: 'name is required' });
+  }
+
+  const normalized = name.trim().toLowerCase();
+
+  // Create tag if it doesn't exist
+  db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)').run(normalized);
+  const tag = db.prepare('SELECT * FROM tags WHERE name = ?').get(normalized);
+
+  // Link tag to task (idempotent)
+  db.prepare('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)').run(task.id, tag.id);
+
+  res.status(201).json({ id: tag.id, name: tag.name });
+});
+
+// DELETE /tasks/:id/tags/:tagName — remove a tag from a task
+router.delete('/:id/tags/:tagName', (req, res) => {
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+
+  if (!task) {
+    return res.status(404).json({ error: 'Task not found' });
+  }
+
+  const normalized = req.params.tagName.trim().toLowerCase();
+  const tag = db.prepare('SELECT * FROM tags WHERE name = ?').get(normalized);
+
+  if (tag) {
+    db.prepare('DELETE FROM task_tags WHERE task_id = ? AND tag_id = ?').run(task.id, tag.id);
+  }
+
   res.status(204).send();
 });
 
