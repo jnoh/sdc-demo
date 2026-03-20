@@ -3,16 +3,26 @@ const db = require('../db');
 
 const router = express.Router();
 
-// GET /tasks — list all tasks, optional ?status= filter
+// GET /tasks — list all tasks, optional ?status= filter, optional ?sort= ordering
 router.get('/', (req, res) => {
-  const { status } = req.query;
+  const { status, sort } = req.query;
+
+  let sql = 'SELECT * FROM tasks';
+  const params = [];
 
   if (status) {
-    const tasks = db.prepare('SELECT * FROM tasks WHERE status = ?').all(status);
-    return res.json(tasks);
+    sql += ' WHERE status = ?';
+    params.push(status);
   }
 
-  const tasks = db.prepare('SELECT * FROM tasks').all();
+  if (sort) {
+    const [column, direction] = sort.split(':');
+    if (column === 'created_at' && (direction === 'asc' || direction === 'desc')) {
+      sql += ` ORDER BY created_at ${direction.toUpperCase()}`;
+    }
+  }
+
+  const tasks = db.prepare(sql).all(...params);
   res.json(tasks);
 });
 
@@ -53,6 +63,12 @@ router.patch('/:id', (req, res) => {
   }
 
   const { title, description, status } = req.body;
+
+  const validStatuses = ['todo', 'in-progress', 'done'];
+  if (status !== undefined && !validStatuses.includes(status)) {
+    return res.status(400).json({ error: 'invalid status' });
+  }
+
   const now = new Date().toISOString();
 
   const updatedTitle = title !== undefined ? title : task.title;
