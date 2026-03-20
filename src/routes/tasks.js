@@ -3,16 +3,33 @@ const db = require('../db');
 
 const router = express.Router();
 
-// GET /tasks — list all tasks, optional ?status= filter, optional ?sort= ordering
+// GET /tasks — list all tasks, optional filters and sorting
 router.get('/', (req, res) => {
-  const { status, sort } = req.query;
+  const { status, sort, priority, overdue } = req.query;
 
   let sql = 'SELECT * FROM tasks';
+  const conditions = [];
   const params = [];
 
   if (status) {
-    sql += ' WHERE status = ?';
+    conditions.push('status = ?');
     params.push(status);
+  }
+
+  if (priority) {
+    conditions.push('priority = ?');
+    params.push(priority);
+  }
+
+  if (overdue === 'true') {
+    conditions.push('due_date < ?');
+    conditions.push('status != ?');
+    params.push(new Date().toISOString());
+    params.push('done');
+  }
+
+  if (conditions.length > 0) {
+    sql += ' WHERE ' + conditions.join(' AND ');
   }
 
   if (sort) {
@@ -28,16 +45,21 @@ router.get('/', (req, res) => {
 
 // POST /tasks — create a task
 router.post('/', (req, res) => {
-  const { title, description } = req.body;
+  const { title, description, priority, due_date } = req.body;
 
   if (!title) {
     return res.status(400).json({ error: 'title is required' });
   }
 
+  const validPriorities = ['low', 'medium', 'high'];
+  if (priority !== undefined && !validPriorities.includes(priority)) {
+    return res.status(400).json({ error: 'invalid priority' });
+  }
+
   const now = new Date().toISOString();
   const result = db.prepare(
-    'INSERT INTO tasks (title, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(title, description || null, 'todo', now, now);
+    'INSERT INTO tasks (title, description, status, priority, due_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(title, description || null, 'todo', priority || 'medium', due_date || null, now, now);
 
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(task);
@@ -62,11 +84,16 @@ router.patch('/:id', (req, res) => {
     return res.status(404).json({ error: 'Task not found' });
   }
 
-  const { title, description, status } = req.body;
+  const { title, description, status, priority, due_date } = req.body;
 
   const validStatuses = ['todo', 'in-progress', 'done'];
   if (status !== undefined && !validStatuses.includes(status)) {
     return res.status(400).json({ error: 'invalid status' });
+  }
+
+  const validPriorities = ['low', 'medium', 'high'];
+  if (priority !== undefined && !validPriorities.includes(priority)) {
+    return res.status(400).json({ error: 'invalid priority' });
   }
 
   const now = new Date().toISOString();
@@ -74,10 +101,12 @@ router.patch('/:id', (req, res) => {
   const updatedTitle = title !== undefined ? title : task.title;
   const updatedDescription = description !== undefined ? description : task.description;
   const updatedStatus = status !== undefined ? status : task.status;
+  const updatedPriority = priority !== undefined ? priority : task.priority;
+  const updatedDueDate = due_date !== undefined ? due_date : task.due_date;
 
   db.prepare(
-    'UPDATE tasks SET title = ?, description = ?, status = ?, updated_at = ? WHERE id = ?'
-  ).run(updatedTitle, updatedDescription, updatedStatus, now, req.params.id);
+    'UPDATE tasks SET title = ?, description = ?, status = ?, priority = ?, due_date = ?, updated_at = ? WHERE id = ?'
+  ).run(updatedTitle, updatedDescription, updatedStatus, updatedPriority, updatedDueDate, now, req.params.id);
 
   const updatedTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   res.json(updatedTask);
