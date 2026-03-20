@@ -1,0 +1,1 @@
+/Users/jnoh/dev/self-driving-codebase/skills/write-spec/SKILL.md

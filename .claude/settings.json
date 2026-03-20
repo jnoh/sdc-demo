@@ -1,0 +1,38 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(gh issue *)",
+      "Bash(gh api *)",
+      "Bash(npm test*)",
+      "Bash(npx *)",
+      "Bash(echo * >> .sdc/logs/*)",
+      "Bash(mkdir -p .sdc/logs)"
+    ]
+  },
+  "hooks": {
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$(date -u +%Y-%m-%dT%H:%M:%SZ) [hook] agent-start\" >> .sdc/logs/run-latest.log"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$(date -u +%Y-%m-%dT%H:%M:%SZ) [hook] agent-stop\" >> .sdc/logs/run-latest.log"
+          }
+        ]
+      }
+    ]
+  }
+}
