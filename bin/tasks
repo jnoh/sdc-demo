@@ -1,0 +1,92 @@
+#!/usr/bin/env node
+'use strict';
+
+const path = require('path');
+const { parseArgs } = require('./lib/args');
+const { bold, dim } = require('./lib/output');
+
+// Command registry — each entry maps to a module in bin/commands/
+const commands = {
+  list:     { description: 'List all tasks',                   file: './commands/list' },
+  add:      { description: 'Create a new task',                file: './commands/add' },
+  show:     { description: 'Show task details',                file: './commands/show' },
+  update:   { description: 'Update a task',                    file: './commands/update' },
+  done:     { description: 'Mark a task as done',              file: './commands/done' },
+  delete:   { description: 'Delete a task',                    file: './commands/delete' },
+  tag:      { description: 'Add a tag to a task',              file: './commands/tag' },
+  untag:    { description: 'Remove a tag from a task',         file: './commands/untag' },
+  tags:     { description: 'List all tags',                    file: './commands/tags' },
+  projects: { description: 'Manage projects',                  file: './commands/projects' },
+  help:     { description: 'Show this help message',           file: null },
+};
+
+function showHelp() {
+  const lines = [
+    bold('tasks') + ' — a command-line task manager',
+    '',
+    `${bold('Usage:')} tasks <command> [options]`,
+    '',
+    bold('Commands:'),
+  ];
+
+  const maxLen = Math.max(...Object.keys(commands).map(k => k.length));
+  for (const [name, cmd] of Object.entries(commands)) {
+    lines.push(`  ${name.padEnd(maxLen + 2)}${dim(cmd.description)}`);
+  }
+
+  lines.push('');
+  lines.push(`Run ${bold('tasks <command> --help')} for command-specific usage.`);
+  console.log(lines.join('\n'));
+}
+
+async function main() {
+  const { positionals, flags } = parseArgs(process.argv.slice(2));
+  const commandName = positionals[0];
+
+  if (!commandName || commandName === 'help') {
+    showHelp();
+    process.exit(0);
+  }
+
+  const entry = commands[commandName];
+  if (!entry) {
+    console.error(`Unknown command: ${commandName}\n`);
+    showHelp();
+    process.exit(1);
+  }
+
+  if (flags.help) {
+    // Load the command module and call its help function if available
+    let mod;
+    try {
+      mod = require(entry.file);
+    } catch {
+      console.log(`${bold(commandName)} — ${entry.description}\n\nNo detailed help available.`);
+      process.exit(0);
+    }
+    if (typeof mod.help === 'function') {
+      mod.help();
+    } else {
+      console.log(`${bold(commandName)} — ${entry.description}\n\nNo detailed help available.`);
+    }
+    process.exit(0);
+  }
+
+  // Load and execute the command
+  let mod;
+  try {
+    mod = require(entry.file);
+  } catch (err) {
+    console.error(`Command "${commandName}" is not yet implemented.`);
+    process.exit(1);
+  }
+
+  try {
+    await mod.run(positionals.slice(1), flags);
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+main();
