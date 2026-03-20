@@ -59,10 +59,12 @@ function request(method, urlPath, body) {
 }
 
 /**
- * Helper: clear all rows from the tasks table between tests.
+ * Helper: clear all rows from tasks, task_tags, and tags tables between tests.
  */
 function clearTasks() {
   const db = require('./db');
+  db.exec('DELETE FROM task_tags');
+  db.exec('DELETE FROM tags');
   db.exec('DELETE FROM tasks');
 }
 
@@ -304,6 +306,155 @@ describe('Tasks API', () => {
       const res = await request('DELETE', '/tasks/99999');
       assert.equal(res.status, 404);
       assert.equal(res.body.error, 'Task not found');
+    });
+  });
+
+  // ---- POST /tasks/:id/tags ----
+
+  describe('POST /tasks/:id/tags', () => {
+    it('adds a tag to a task and returns 201', async () => {
+      const task = await request('POST', '/tasks', { title: 'Tagged task' });
+      const res = await request('POST', `/tasks/${task.body.id}/tags`, { name: 'urgent' });
+      assert.equal(res.status, 201);
+      assert.equal(res.body.name, 'urgent');
+      assert.ok(res.body.id, 'should have a tag id');
+    });
+
+    it('normalizes tag name to lowercase and trimmed', async () => {
+      const task = await request('POST', '/tasks', { title: 'Tagged task' });
+      const res = await request('POST', `/tasks/${task.body.id}/tags`, { name: '  URGENT  ' });
+      assert.equal(res.status, 201);
+      assert.equal(res.body.name, 'urgent');
+    });
+
+    it('returns 404 for non-existent task', async () => {
+      const res = await request('POST', '/tasks/99999/tags', { name: 'urgent' });
+      assert.equal(res.status, 404);
+      assert.equal(res.body.error, 'Task not found');
+    });
+
+    it('returns 400 when name is missing', async () => {
+      const task = await request('POST', '/tasks', { title: 'Tagged task' });
+      const res = await request('POST', `/tasks/${task.body.id}/tags`, {});
+      assert.equal(res.status, 400);
+      assert.equal(res.body.error, 'name is required');
+    });
+
+    it('is idempotent — adding same tag twice does not error', async () => {
+      const task = await request('POST', '/tasks', { title: 'Tagged task' });
+      await request('POST', `/tasks/${task.body.id}/tags`, { name: 'urgent' });
+      const res = await request('POST', `/tasks/${task.body.id}/tags`, { name: 'urgent' });
+      assert.equal(res.status, 201);
+
+      // Verify no duplicate in task tags
+      const taskRes = await request('GET', `/tasks/${task.body.id}`);
+      const urgentTags = taskRes.body.tags.filter(t => t.name === 'urgent');
+      assert.equal(urgentTags.length, 1);
+    });
+  });
+
+  // ---- DELETE /tasks/:id/tags/:tagName ----
+
+  describe('DELETE /tasks/:id/tags/:tagName', () => {
+    it('removes a tag from a task and returns 204', async () => {
+      const task = await request('POST', '/tasks', { title: 'Tagged task' });
+      await request('POST', `/tasks/${task.body.id}/tags`, { name: 'urgent' });
+
+      const res = await request('DELETE', `/tasks/${task.body.id}/tags/urgent`);
+      assert.equal(res.status, 204);
+
+      // Verify tag is removed from task
+      const taskRes = await request('GET', `/tasks/${task.body.id}`);
+      assert.equal(taskRes.body.tags.length, 0);
+    });
+
+    it('tag itself remains after removal from task', async () => {
+      const task = await request('POST', '/tasks', { title: 'Tagged task' });
+      await request('POST', `/tasks/${task.body.id}/tags`, { name: 'urgent' });
+      await request('DELETE', `/tasks/${task.body.id}/tags/urgent`);
+
+      // Tag should still exist in GET /tags
+      const tagsRes = await request('GET', '/tags');
+      const urgent = tagsRes.body.find(t => t.name === 'urgent');
+      assert.ok(urgent, 'tag should still exist');
+    });
+
+    it('returns 404 for non-existent task', async () => {
+      const res = await request('DELETE', '/tasks/99999/tags/urgent');
+      assert.equal(res.status, 404);
+      assert.equal(res.body.error, 'Task not found');
+    });
+  });
+
+  // ---- GET /tags ----
+
+  describe('GET /tags', () => {
+    it('returns all tags with task counts', async () => {
+      const task1 = await request('POST', '/tasks', { title: 'Task 1' });
+      const task2 = await request('POST', '/tasks', { title: 'Task 2' });
+      await request('POST', `/tasks/${task1.body.id}/tags`, { name: 'urgent' });
+      await request('POST', `/tasks/${task2.body.id}/tags`, { name: 'urgent' });
+      await request('POST', `/tasks/${task1.body.id}/tags`, { name: 'bug' });
+
+      const res = await request('GET', '/tags');
+      assert.equal(res.status, 200);
+      const urgent = res.body.find(t => t.name === 'urgent');
+      const bug = res.body.find(t => t.name === 'bug');
+      assert.equal(urgent.taskCount, 2);
+      assert.equal(bug.taskCount, 1);
+    });
+
+    it('returns empty array when no tags exist', async () => {
+      const res = await request('GET', '/tags');
+      assert.equal(res.status, 200);
+      assert.deepEqual(res.body, []);
+    });
+  });
+
+  // ---- GET /tasks?tag= filter ----
+
+  describe('GET /tasks?tag= filter', () => {
+    it('filters tasks by tag', async () => {
+      const task1 = await request('POST', '/tasks', { title: 'Task 1' });
+      const task2 = await request('POST', '/tasks', { title: 'Task 2' });
+      await request('POST', `/tasks/${task1.body.id}/tags`, { name: 'urgent' });
+
+      const res = await request('GET', '/tasks?tag=urgent');
+      assert.equal(res.status, 200);
+      assert.equal(res.body.length, 1);
+      assert.equal(res.body[0].title, 'Task 1');
+    });
+
+    it('returns empty array when no tasks have the tag', async () => {
+      await request('POST', '/tasks', { title: 'Task 1' });
+      const res = await request('GET', '/tasks?tag=nonexistent');
+      assert.equal(res.status, 200);
+      assert.deepEqual(res.body, []);
+    });
+  });
+
+  // ---- GET /tasks/:id includes tags ----
+
+  describe('GET /tasks/:id includes tags', () => {
+    it('includes tags array in response', async () => {
+      const task = await request('POST', '/tasks', { title: 'Tagged task' });
+      await request('POST', `/tasks/${task.body.id}/tags`, { name: 'urgent' });
+      await request('POST', `/tasks/${task.body.id}/tags`, { name: 'bug' });
+
+      const res = await request('GET', `/tasks/${task.body.id}`);
+      assert.equal(res.status, 200);
+      assert.ok(Array.isArray(res.body.tags), 'tags should be an array');
+      assert.equal(res.body.tags.length, 2);
+      const tagNames = res.body.tags.map(t => t.name).sort();
+      assert.deepEqual(tagNames, ['bug', 'urgent']);
+    });
+
+    it('includes empty tags array when task has no tags', async () => {
+      const task = await request('POST', '/tasks', { title: 'No tags' });
+      const res = await request('GET', `/tasks/${task.body.id}`);
+      assert.equal(res.status, 200);
+      assert.ok(Array.isArray(res.body.tags), 'tags should be an array');
+      assert.equal(res.body.tags.length, 0);
     });
   });
 });
