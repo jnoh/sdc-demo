@@ -158,6 +158,70 @@ describe('Tasks API', () => {
     });
   });
 
+  // ---- GET /tasks sorting ----
+
+  describe('GET /tasks sorting', () => {
+    it('returns tasks sorted by created_at ascending', async () => {
+      // Insert tasks directly via db with known timestamps to avoid timing issues
+      const db = require('./db');
+      db.prepare(
+        'INSERT INTO tasks (title, status, created_at, updated_at) VALUES (?, ?, ?, ?)'
+      ).run('First', 'todo', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+      db.prepare(
+        'INSERT INTO tasks (title, status, created_at, updated_at) VALUES (?, ?, ?, ?)'
+      ).run('Second', 'todo', '2025-01-02T00:00:00.000Z', '2025-01-02T00:00:00.000Z');
+      db.prepare(
+        'INSERT INTO tasks (title, status, created_at, updated_at) VALUES (?, ?, ?, ?)'
+      ).run('Third', 'todo', '2025-01-03T00:00:00.000Z', '2025-01-03T00:00:00.000Z');
+
+      const res = await request('GET', '/tasks?sort=created_at:asc');
+      assert.equal(res.status, 200);
+      assert.equal(res.body.length, 3);
+      assert.equal(res.body[0].title, 'First');
+      assert.equal(res.body[1].title, 'Second');
+      assert.equal(res.body[2].title, 'Third');
+    });
+
+    it('returns tasks sorted by created_at descending', async () => {
+      const db = require('./db');
+      db.prepare(
+        'INSERT INTO tasks (title, status, created_at, updated_at) VALUES (?, ?, ?, ?)'
+      ).run('First', 'todo', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+      db.prepare(
+        'INSERT INTO tasks (title, status, created_at, updated_at) VALUES (?, ?, ?, ?)'
+      ).run('Second', 'todo', '2025-01-02T00:00:00.000Z', '2025-01-02T00:00:00.000Z');
+      db.prepare(
+        'INSERT INTO tasks (title, status, created_at, updated_at) VALUES (?, ?, ?, ?)'
+      ).run('Third', 'todo', '2025-01-03T00:00:00.000Z', '2025-01-03T00:00:00.000Z');
+
+      const res = await request('GET', '/tasks?sort=created_at:desc');
+      assert.equal(res.status, 200);
+      assert.equal(res.body.length, 3);
+      assert.equal(res.body[0].title, 'Third');
+      assert.equal(res.body[1].title, 'Second');
+      assert.equal(res.body[2].title, 'First');
+    });
+
+    it('sorts correctly when combined with status filter', async () => {
+      const db = require('./db');
+      db.prepare(
+        'INSERT INTO tasks (title, status, created_at, updated_at) VALUES (?, ?, ?, ?)'
+      ).run('Done Early', 'done', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+      db.prepare(
+        'INSERT INTO tasks (title, status, created_at, updated_at) VALUES (?, ?, ?, ?)'
+      ).run('Todo Task', 'todo', '2025-01-02T00:00:00.000Z', '2025-01-02T00:00:00.000Z');
+      db.prepare(
+        'INSERT INTO tasks (title, status, created_at, updated_at) VALUES (?, ?, ?, ?)'
+      ).run('Done Late', 'done', '2025-01-03T00:00:00.000Z', '2025-01-03T00:00:00.000Z');
+
+      const res = await request('GET', '/tasks?status=done&sort=created_at:asc');
+      assert.equal(res.status, 200);
+      assert.equal(res.body.length, 2);
+      assert.equal(res.body[0].title, 'Done Early');
+      assert.equal(res.body[1].title, 'Done Late');
+    });
+  });
+
   // ---- GET /tasks/:id ----
 
   describe('GET /tasks/:id', () => {
@@ -205,6 +269,21 @@ describe('Tasks API', () => {
       const res = await request('PATCH', '/tasks/99999', { title: 'Ghost' });
       assert.equal(res.status, 404);
       assert.equal(res.body.error, 'Task not found');
+    });
+
+    it('returns 400 when status is invalid', async () => {
+      const created = await request('POST', '/tasks', { title: 'Validate me' });
+      const res = await request('PATCH', `/tasks/${created.body.id}`, { status: 'invalid' });
+      assert.equal(res.status, 400);
+      assert.equal(res.body.error, 'invalid status');
+    });
+
+    it('accepts status "done" as valid', async () => {
+      const created = await request('POST', '/tasks', { title: 'Finish me' });
+      const res = await request('PATCH', `/tasks/${created.body.id}`, { status: 'done' });
+      assert.equal(res.status, 200);
+      assert.equal(res.body.status, 'done');
+      assert.equal(res.body.id, created.body.id);
     });
   });
 
