@@ -10,19 +10,19 @@
 - [x] JSON error responses with appropriate status codes
 - [x] GET /tasks supports ?sort=created_at:asc or ?sort=created_at:desc
 - [x] PATCH /tasks/:id validates status is one of: todo, in-progress, done
-- [ ] POST /tasks accepts optional priority (low/medium/high) and due_date fields
-- [ ] PATCH /tasks/:id can update priority and due_date
-- [ ] GET /tasks supports ?priority= filter
-- [ ] GET /tasks supports ?overdue=true filter (due_date < now AND status != done)
-- [ ] GET /tasks/:id response includes tags array and project object (if assigned)
-- [ ] POST /tasks/:id/tags — add a tag to a task (create tag if it doesn't exist)
-- [ ] DELETE /tasks/:id/tags/:tagName — remove a tag from a task
-- [ ] GET /tags — list all tags with task counts
-- [ ] GET /tasks supports ?tag= filter
-- [ ] CRUD endpoints for projects: GET /projects, POST /projects, GET /projects/:id, PATCH /projects/:id, DELETE /projects/:id
-- [ ] GET /projects/:id/tasks — list tasks belonging to a project
-- [ ] PATCH /tasks/:id can assign/unassign project_id
-- [ ] GET /health — returns { status: "ok", uptime, taskCount }
+- [x] POST /tasks accepts optional priority (low/medium/high) and due_date fields
+- [x] PATCH /tasks/:id can update priority and due_date
+- [x] GET /tasks supports ?priority= filter
+- [x] GET /tasks supports ?overdue=true filter (due_date < now AND status != done)
+- [x] GET /tasks/:id response includes tags array and project object (if assigned)
+- [x] POST /tasks/:id/tags — add a tag to a task (create tag if it doesn't exist)
+- [x] DELETE /tasks/:id/tags/:tagName — remove a tag from a task
+- [x] GET /tags — list all tags with task counts
+- [x] GET /tasks supports ?tag= filter
+- [x] CRUD endpoints for projects: GET /projects, POST /projects, GET /projects/:id, PATCH /projects/:id, DELETE /projects/:id
+- [x] GET /projects/:id/tasks — list tasks belonging to a project
+- [x] PATCH /tasks/:id can assign/unassign project_id
+- [x] GET /health — returns { status: "ok", uptime, taskCount }
 
 ## Acceptance Criteria
 - POST /tasks with {title: "test", priority: "high", due_date: "2026-04-01T00:00:00Z"} → 201

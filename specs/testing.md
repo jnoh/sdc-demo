@@ -7,12 +7,12 @@
 - [x] npm test runs all tests and exits with correct code
 - [x] Tests cover sorting functionality
 - [x] Tests cover status validation on PATCH
-- [ ] Tests for priority field (create with priority, filter by priority, validate priority)
-- [ ] Tests for due_date field (create with due_date, overdue filter)
-- [ ] Tests for tags (add tag, remove tag, list tags, filter by tag)
-- [ ] Tests for projects (CRUD, list project tasks, assign task to project)
-- [ ] Tests for health endpoint
-- [ ] Test that GET /tasks/:id includes tags and project in response
+- [x] Tests for priority field (create with priority, filter by priority, validate priority)
+- [x] Tests for due_date field (create with due_date, overdue filter)
+- [x] Tests for tags (add tag, remove tag, list tags, filter by tag)
+- [x] Tests for projects (CRUD, list project tasks, assign task to project)
+- [x] Tests for health endpoint
+- [x] Test that GET /tasks/:id includes tags and project in response
 
 ## Acceptance Criteria
 - `npm test` passes with 0 exit code
